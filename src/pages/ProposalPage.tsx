@@ -28,7 +28,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { formatCurrency, formatDate, addDays } from '../utils/format';
-import { calculateGenericFinancing } from '../utils/financing';
+import { calculateGenericFinancing, MARKET_RATES } from '../utils/financing';
 
 type ConsortiumType = 'imobiliario' | 'automovel';
 type LanceType = 'fixo' | 'livre' | 'nenhum';
@@ -144,6 +144,8 @@ export default function ProposalPage() {
     );
   }
 
+  const isImobiliario = data.consortiumType === 'imobiliario';
+
   const totalConsortium = useMemo(() => {
     let total = data.firstInstallment + data.otherInstallments * (data.months - 1);
     if (data.isParcelinha && data.postContemplationInstallment) {
@@ -157,15 +159,26 @@ export default function ProposalPage() {
     return total;
   }, [data]);
 
-  const financing = useMemo(
-    () => calculateGenericFinancing(data.creditValue, data.months, 0.012),
-    [data]
-  );
+  // Valor líquido para financiamento (quando há lance embutido)
+  const valorLiquidoParaFinanciamento = data.lanceType === 'fixo' 
+    ? data.creditValue - (data.creditValue * 0.25)
+    : data.creditValue;
 
+  const financing = useMemo(
+    () => {
+      const rate = isImobiliario ? MARKET_RATES.imobiliario : MARKET_RATES.automovel;
+      return calculateGenericFinancing(
+        valorLiquidoParaFinanciamento, 
+        data.months, 
+        rate.monthly
+      );
+    },
+    [data, isImobiliario, valorLiquidoParaFinanciamento]
+  );
+  
   const economia = financing.totalPaid - totalConsortium;
   const economiaPercent = (economia / financing.totalPaid) * 100;
   
-  const isImobiliario = data.consortiumType === 'imobiliario';
   const indiceReajuste = isImobiliario ? 'INCC' : 'IPCA';
   const indiceDescription = isImobiliario
     ? 'Índice Nacional de Custo da Construção'
@@ -253,6 +266,15 @@ export default function ProposalPage() {
         <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Demais Parcelas:</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${formatCurrency(data.otherInstallments)}</td></tr>
         ${data.isParcelinha && data.postContemplationInstallment ? `<tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">Pós-Contemplação:</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${formatCurrency(data.postContemplationInstallment)}</td></tr>` : ''}
         <tr style="background-color: #fef3c7;"><td style="padding: 8px; border: 1px solid #f59e0b; font-weight: bold;">Total a Pagar (${data.lanceType === 'fixo' ? 'Líquido' : 'Crédito'} + Encargos):</td><td style="padding: 8px; border: 1px solid #f59e0b; font-weight: bold; color: #d97706;">${formatCurrency(totalGeral)}</td></tr>
+      </table>
+      
+      <h3 style="color: #334155; font-family: Arial, sans-serif; margin-top: 20px;">📊 Comparativo com Financiamento</h3>
+      <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">
+        <tr style="background-color: #ecfdf5;"><td style="padding: 8px; border: 1px solid #10b981; font-weight: bold;">Consórcio - Total:</td><td style="padding: 8px; border: 1px solid #10b981; font-weight: bold; color: #10b981;">${formatCurrency(totalGeral)}</td></tr>
+        <tr style="background-color: #fef2f2;"><td style="padding: 8px; border: 1px solid #ef4444; font-weight: bold;">Financiamento - Valor:</td><td style="padding: 8px; border: 1px solid #ef4444;">${formatCurrency(valorLiquidoParaFinanciamento)}</td></tr>
+        <tr style="background-color: #fef2f2;"><td style="padding: 8px; border: 1px solid #ef4444; font-weight: bold;">Financiamento - Juros (${isImobiliario ? '11,40% a.a.' : '26% a.a.'}):</td><td style="padding: 8px; border: 1px solid #ef4444;">${formatCurrency(financing.totalInterest)}</td></tr>
+        <tr style="background-color: #fef2f2;"><td style="padding: 8px; border: 1px solid #ef4444; font-weight: bold;">Financiamento - Total:</td><td style="padding: 8px; border: 1px solid #ef4444; font-weight: bold; color: #dc2626;">${formatCurrency(financing.totalPaid)}</td></tr>
+        <tr style="background-color: #f0fdf4;"><td style="padding: 8px; border: 1px solid #22c55e; font-weight: bold;">Economia com Consórcio:</td><td style="padding: 8px; border: 1px solid #22c55e; font-weight: bold; color: #16a34a;">${formatCurrency(economia)} (${economiaPercent.toFixed(1)}%)</td></tr>
       </table>
       
       <h3 style="color: #334155; font-family: Arial, sans-serif; margin-top: 20px;">📎 Documentos Anexados</h3>
@@ -924,7 +946,7 @@ _Desejo prosseguir com a aquisição do consórcio._
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Valor financiado:</span>
-                  <span className="text-slate-300">{formatCurrency(data.creditValue)}</span>
+                  <span className="text-slate-300">{formatCurrency(valorLiquidoParaFinanciamento)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Juros totais:</span>
@@ -938,7 +960,7 @@ _Desejo prosseguir com a aquisição do consórcio._
                 </div>
               </div>
               <p className="text-red-300 text-xs mt-3">
-                ❌ Com juros de ~{financing.monthlyRate * 100}% a.m. (SAC)
+                ❌ Com juros de {isImobiliario ? '11,40% a.a.' : '26% a.a.'} (SAC)
               </p>
             </div>
           </div>
@@ -952,7 +974,7 @@ _Desejo prosseguir com a aquisição do consórcio._
           </div>
 
           <p className="text-slate-500 text-xs mt-3 text-center">
-            *Comparação baseada em financiamento SAC com taxa média de mercado de 1,2% a.m.
+            *Comparação baseada em financiamento SAC com taxas médias de mercado: Imobiliário 11,40% a.a. | Veículos 26% a.a.
             Valores ilustrativos.
           </p>
         </div>
