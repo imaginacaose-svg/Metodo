@@ -1,0 +1,2 @@
+# Metodo
+Simulador
